@@ -45,6 +45,7 @@ class Trainer:
         self.args = args
         if self.args.model:
             self.exp.model = torch.load(self.args.model)
+        self.exp.num_classes = self.args.num_classes
         self.exp.basic_lr_per_img /= (10**self.args.lr_ratio)
         self.previous_lr = self.exp.basic_lr_per_img
         self.mode = mode
@@ -63,7 +64,7 @@ class Trainer:
         self.input_size = exp.input_size
         self.best_ap = 0
 
-        self.criteria = RetrainUtils(self.data_type)
+        self.criteria = RetrainUtils(self.data_type, self.exp.num_classes)
 
         # metric record
         self.meter = MeterBuffer(window_size=exp.print_interval)
