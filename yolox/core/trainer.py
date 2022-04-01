@@ -35,6 +35,7 @@ from yolox.utils import (
     synchronize
 )
 from .retrain_utils import RetrainUtils
+from yolox.utils.raw_metrics import RawMetrics
 
 class Trainer:
     def __init__(self, exp, args, mode="train"):
@@ -396,6 +397,15 @@ class Trainer:
         ap50_95, ap50, summary = self.exp.eval(
             evalmodel, self.evaluator, self.is_distributed
         )
+            
+        raw_metrics = RawMetrics()
+        raw_metrics_res = raw_metrics.get_raw_metrics(
+            model=evalmodel,
+            nms_thr=0.45, 
+            score_thr=0.4, 
+            iou_thr=0.5
+        )# raw metrics 로깅을 위한 함수
+        
         self.model.train()
         if self.rank == 0:
             self.tblogger.add_scalar("val/COCOAP50", ap50, self.epoch + 1)
@@ -404,6 +414,10 @@ class Trainer:
         synchronize()
         if self.mode == "train" and self.args.use_wandb:
             wandb.log({"ap50_95": ap50_95, "ap50": ap50}, step=self.epoch+1)
+            
+            for metric in raw_metrics_res.keys():
+                wandb.log({metric: raw_metrics_res[metric]}, step=self.epoch+1)
+                print(f"{metric}: {raw_metrics_res[metric]}")
 
         self.save_ckpt("last_epoch", ap50_95 > self.best_ap)
         self.best_ap = max(self.best_ap, ap50_95)
