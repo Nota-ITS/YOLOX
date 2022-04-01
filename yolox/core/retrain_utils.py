@@ -9,7 +9,7 @@ from yolox.utils import bboxes_iou
 from loguru import logger
 
 class RetrainUtils(nn.Module):
-    def __init__(self, dtype=torch.float16):
+    def __init__(self, dtype=torch.float16, num_classes=11):
         super().__init__()
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.xin_type = dtype
@@ -23,7 +23,7 @@ class RetrainUtils(nn.Module):
         self.bcewithlog_loss = nn.BCEWithLogitsLoss(reduction="none")
         self.iou_loss = IOUloss(reduction="none")
         self.grids = [torch.zeros(1).to(self.device)] * len(self.in_channels)
-        self.num_classes = 11
+        self.num_classes = num_classes
 
         self.use_l1 = False
     

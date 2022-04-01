@@ -25,6 +25,7 @@ def make_parser():
     parser.add_argument("--optimize_lr", type=bool, default=False, help="use optimized lr")
     parser.add_argument("--use_wandb", type=bool, default=False, help="Use Wandb")
     parser.add_argument("--model", type=str, help="model path", default=None)
+    parser.add_argument("--num_classes", type=int, help="classes num", default=11)
     # distributed
     parser.add_argument(
         "--dist-backend", default="nccl", type=str, help="distributed backend"
