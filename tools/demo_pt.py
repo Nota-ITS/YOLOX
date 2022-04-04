@@ -12,6 +12,7 @@ paths = os.getcwd().split("/")[0:-1]
 base_path = "/".join(paths)
 nets_path = os.path.join(base_path, "netspresso-compression-toolkit")
 sys.path.append(nets_path)
+sys.path.append(os.getcwd())
 from yolox.data.data_augment import preproc as preprocess
 from yolox.data.datasets import COCO_CLASSES
 from yolox.utils import mkdir, multiclass_nms, demo_postprocess, vis
