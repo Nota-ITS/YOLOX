@@ -125,11 +125,15 @@ class Trainer:
 
     def train(self):
         try:
-            train_and_log_torch_model(
-                train_func=self.train_in_epoch,
-                project_name="yolox",
-                run_name=self.args.run_name
-            )
+            
+            if self.args.use_wandb:
+                train_and_log_torch_model(
+                    train_func=self.train_in_epoch,
+                    project_name="yolox",
+                    run_name=self.args.run_name
+                )
+            else:
+                self.train_in_epoch()
         except Exception:
             raise
         finally:
