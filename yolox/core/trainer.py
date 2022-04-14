@@ -129,7 +129,8 @@ class Trainer:
                 train_and_log_torch_model(
                     train_func=self.train_in_epoch,
                     project_name="yolox",
-                    run_name=self.args.run_name
+                    run_name=self.args.run_name,
+                    local_rank=self.local_rank
                 )
             else:
                 self.train_in_epoch()
@@ -144,7 +145,7 @@ class Trainer:
             print("optimize_lr mode is True")
             print("="*100)
             ap50_95, ap50, finetuned_lr = self.finetune_lr()
-            if self.args.use_wandb:
+            if self.args.use_wandb and self.local_rank==0:
                 wandb.log({"ap50_95": ap50_95, "ap50": ap50}, step=0)
             print("="*100)
             print("finetune_lr finished !!")
@@ -162,7 +163,7 @@ class Trainer:
             ap50_95, ap50, summary = self.exp.eval(
                 self.model, self.evaluator, self.is_distributed
             )
-            if self.args.use_wandb:
+            if self.args.use_wandb and self.local_rank==0:
                 wandb.log({"ap50_95": ap50_95, "ap50": ap50}, step=0)
 
         print("="*100)
@@ -198,7 +199,7 @@ class Trainer:
             preds = self.model(inps)
             outputs = self.criteria(preds, targets, inps)
         loss = outputs["total_loss"]
-        if self.mode == "train" and self.args.use_wandb:
+        if self.mode == "train" and self.args.use_wandb and self.local_rank==0:
             wandb.log({"loss": loss}, step=self.epoch+1)
         self.optimizer.zero_grad()
         self.scaler.scale(loss).backward()
@@ -418,7 +419,7 @@ class Trainer:
             self.tblogger.add_scalar("val/COCOAP50_95", ap50_95, self.epoch + 1)
             logger.info("\n" + summary)
         synchronize()
-        if self.mode == "train" and self.args.use_wandb:
+        if self.mode == "train" and self.args.use_wandb and self.local_rank:
             wandb.log({"ap50_95": ap50_95, "ap50": ap50}, step=self.epoch+1)
             
             for metric in raw_metrics_res.keys():
