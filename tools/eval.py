@@ -22,7 +22,7 @@ def make_parser():
 
     parser.add_argument("-expn", "--experiment-name", type=str, default=None)
     parser.add_argument("-n", "--name", type=str, default=None, help="model name")
-    parser.add_argument("--model", type=str, default=None, help="model name")
+    # parser.add_argument("--model", type=str, default=None, help="model name")
 
     # distributed
     parser.add_argument(
@@ -140,7 +140,7 @@ def main(exp, args, num_gpu):
     if args.tsize is not None:
         exp.test_size = (args.tsize, args.tsize)
 
-    model = torch.load(args.model)
+    model = exp.get_model()
     logger.info("Model Summary: {}".format(get_model_info(model, exp.test_size)))
     logger.info("Model Structure:\n{}".format(str(model)))
 
@@ -151,6 +151,18 @@ def main(exp, args, num_gpu):
     torch.cuda.set_device(rank)
     model.cuda(rank)
     model.eval()
+
+
+    if not args.speed and not args.trt:
+        if args.ckpt is None:
+            ckpt_file = os.path.join(file_name, "best_ckpt.pth")
+        else:
+            ckpt_file = args.ckpt
+        logger.info("loading checkpoint from {}".format(ckpt_file))
+        loc = "cuda:{}".format(rank)
+        ckpt = torch.load(ckpt_file, map_location=loc)
+        model.load_state_dict(ckpt["model"])
+        logger.info("loaded checkpoint done.")
 
     if is_distributed:
         model = DDP(model, device_ids=[rank])
