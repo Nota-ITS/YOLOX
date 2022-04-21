@@ -69,7 +69,8 @@ class RawMetrics:
             "firetruck":np.array([0, 0]), 
             "police":np.array([0, 0]), 
             "ambulance":np.array([0, 0]), 
-            "pedestrian":np.array([0, 0])
+            "pedestrian":np.array([0, 0]),
+            "av":np.array([0, 0])
         }
 
         if len(pred_labels) == 0 or len(actual_labels) == 0:
@@ -142,7 +143,7 @@ class RawMetrics:
         else:
             final_boxes, final_scores, final_cls_inds = dets[:, :4], dets[:, 4], dets[:, 5]
 
-        label_names = ["car", "bus", "hdv", "truck", "motorcycle", "bicycle", "personal_mobility", "firetruck", "police", "ambulance", "pedestrian"]
+        label_names = ["car", "bus", "hdv", "truck", "motorcycle", "bicycle", "personal_mobility", "firetruck", "police", "ambulance", "pedestrian", "av"]
 
         results = []
         for i in range(dets.shape[0]):
@@ -176,7 +177,8 @@ class RawMetrics:
             "firetruck":np.array([0, 0]), 
             "police":np.array([0, 0]), 
             "ambulance":np.array([0, 0]), 
-            "pedestrian":np.array([0, 0])
+            "pedestrian":np.array([0, 0]),
+            "av":np.array([0, 0])
         }
 
         for line in tqdm(lines):

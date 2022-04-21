@@ -14,5 +14,6 @@ VOC_CLASSES = (
     "firetruck",
     "police",
     "ambulance",
-    "pedestrian"
+    "pedestrian",
+    "av"
 )
