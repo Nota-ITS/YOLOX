@@ -174,8 +174,6 @@ def voc_eval(
             fp[d] = 1.0
 
         # compute precision recall
-    print(f"단순합한 fp{np.sum(fp)}")
-    print(f"단순합한 tp{np.sum(tp)}")
     fp = np.cumsum(fp)
     tp = np.cumsum(tp)
     rec = tp / float(npos)
