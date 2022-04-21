@@ -36,6 +36,7 @@ from yolox.utils import (
 )
 from .retrain_utils import RetrainUtils
 from yolox.utils.raw_metrics import RawMetrics
+from mlops_utils.wandb import train_and_log_torch_model
 
 class Trainer:
     def __init__(self, exp, args, mode="train"):
@@ -123,17 +124,28 @@ class Trainer:
         return ap50_95, b4fine_tune_acc, self.exp.basic_lr_per_img
 
     def train(self):
-        if self.args.use_wandb:
-            if self.is_distributed:
-                wandb.init(project="Nota-YOLOX", group=self.args.run_name, config=self.args)
+        try:
+            if self.args.use_wandb:
+                train_and_log_torch_model(
+                    train_func=self.train_in_epoch,
+                    project_name="yolox",
+                    local_rank = self.local_rank,
+                    run_name=self.args.run_name
+                )
             else:
-                wandb.init(project="Nota-YOLOX", name=self.args.run_name, config=self.args)
+                self.train_in_epoch()
+        except Exception:
+            raise
+        finally:
+            self.after_train()
+
+    def train_in_epoch(self):
         if self.mode == "optimize_lr":
             print("="*100)
             print("optimize_lr mode is True")
             print("="*100)
             ap50_95, ap50, finetuned_lr = self.finetune_lr()
-            if self.args.use_wandb:
+            if self.args.use_wandb and self.local_rank == 0:
                 wandb.log({"ap50_95": ap50_95, "ap50": ap50}, step=0)
             print("="*100)
             print("finetune_lr finished !!")
@@ -151,21 +163,13 @@ class Trainer:
             ap50_95, ap50, summary = self.exp.eval(
                 self.model, self.evaluator, self.is_distributed
             )
-            if self.args.use_wandb:
+            if self.args.use_wandb and self.local_rank == 0:
                 wandb.log({"ap50_95": ap50_95, "ap50": ap50}, step=0)
 
         print("="*100)
         print(f"Learning Rate : {self.exp.basic_lr_per_img}")
         print("="*100)
 
-        try:
-            self.train_in_epoch()
-        except Exception:
-            raise
-        finally:
-            self.after_train()
-
-    def train_in_epoch(self):
         for self.epoch in range(self.start_epoch, self.max_epoch):
             self.before_epoch()
             self.model.train()
@@ -173,6 +177,8 @@ class Trainer:
             if self.mode == "optimize_lr":
                 break
             self.after_epoch()
+
+        return self.model
 
     def train_in_iter(self):
         for self.iter in range(self.max_iter):
@@ -193,7 +199,7 @@ class Trainer:
             preds = self.model(inps)
             outputs = self.criteria(preds, targets, inps)
         loss = outputs["total_loss"]
-        if self.mode == "train" and self.args.use_wandb:
+        if self.mode == "train" and self.args.use_wandb and self.local_rank == 0:
             wandb.log({"loss": loss}, step=self.epoch+1)
         self.optimizer.zero_grad()
         self.scaler.scale(loss).backward()
@@ -413,7 +419,7 @@ class Trainer:
             self.tblogger.add_scalar("val/COCOAP50_95", ap50_95, self.epoch + 1)
             logger.info("\n" + summary)
         synchronize()
-        if self.mode == "train" and self.args.use_wandb:
+        if self.mode == "train" and self.args.use_wandb and self.local_rank == 0:
             wandb.log({"ap50_95": ap50_95, "ap50": ap50}, step=self.epoch+1)
             
             for metric in raw_metrics_res.keys():

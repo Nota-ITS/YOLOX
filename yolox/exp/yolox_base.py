@@ -17,7 +17,7 @@ class Exp(BaseExp):
         super().__init__()
 
         # ---------------- model config ---------------- #
-        self.num_classes = 11
+        self.num_classes = 12
         self.depth = 1.00
         self.width = 1.00
         self.act = 'silu'
