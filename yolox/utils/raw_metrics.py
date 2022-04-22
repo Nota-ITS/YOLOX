@@ -8,113 +8,14 @@ import torch
 from xml.etree.ElementTree import parse
 from collections import defaultdict
 
+from yolox.data.datasets import VOC_CLASSES
 from yolox.utils import multiclass_nms, demo_postprocess
 from yolox.data.data_augment import preproc as preprocess
 
-class RawMetrics:
-    def __init__(self):
-        self.yolox_data_dir = f'./datasets/VOCdevkit/VOC2012'
-        self.image_dir = f"{self.yolox_data_dir}/JPEGImages"
-        self.annotation_dir = f"{self.yolox_data_dir}/Annotations"
-        self.testset_txt_path = f"{self.yolox_data_dir}/ImageSets/Main/test.txt"
-        
-        self.npos = self._get_total_pos()
+from mlops_utils.data import get_data_from_voc, make_batchwise_format
+from mlops_utils.model import Evaluator
 
-
-    def _get_actual_bboxes(self, xml_path):
-        tree = parse(xml_path)
-        root = tree.getroot()
-
-        objects = root.findall("object")
-        bboxes = [[0,0,0,0] for _ in range(len(objects))]
-
-        labels = []
-        for i, obj in enumerate(objects):
-            labels.append(obj.findtext("name"))
-            bboxes[i][0] = int(obj.find("bndbox").findtext("xmin"))
-            bboxes[i][1] = int(obj.find("bndbox").findtext("ymin"))
-            bboxes[i][2] = int(obj.find("bndbox").findtext("xmax"))
-            bboxes[i][3] = int(obj.find("bndbox").findtext("ymax"))
-        
-        return labels, bboxes
-    
-    
-    def _get_total_pos(self,):
-        anno_path = os.path.join(os.getcwd(), self.annotation_dir)
-        with open(self.testset_txt_path, "r", encoding="utf-8") as f:
-            files = f.readlines()
-            
-        total_post_class_dict = defaultdict(int)
-        for file in files:
-            file_path = os.path.join(anno_path, file[:-1]+".xml")
-            tree = parse(file_path)
-            root = tree.getroot()
-            objects = root.findall("object")
-            labels = [x.findtext("name") for x in objects]
-            for label in labels:
-                total_post_class_dict[label] += 1
-
-        return total_post_class_dict
-
-
-    def _count_res(self, pred_bboxes, pred_labels, actual_bboxes, actual_labels, iou_thr):
-        cnt = {
-            "car": np.array([0, 0]), 
-            "bus": np.array([0, 0]), 
-            "hdv": np.array([0, 0]), 
-            "truck": np.array([0, 0]), 
-            "motorcycle":np.array([0, 0]), 
-            "bicycle": np.array([0, 0]), 
-            "personal_mobility":np.array([0, 0]), 
-            "firetruck":np.array([0, 0]), 
-            "police":np.array([0, 0]), 
-            "ambulance":np.array([0, 0]), 
-            "pedestrian":np.array([0, 0]),
-            "av":np.array([0, 0])
-        }
-
-        if len(pred_labels) == 0 or len(actual_labels) == 0:
-            return cnt
-
-        for i, pred_bbox in enumerate(pred_bboxes):
-            for j, actual_bbox in enumerate(actual_bboxes):
-                iou = self._calc_iou(pred_bbox, actual_bbox)
-
-                if iou > iou_thr:
-                    if pred_labels[i] == actual_labels[j]:
-                        cnt[pred_labels[i]][1] += 1
-                    else:
-                        cnt[pred_labels[i]][0] += 1
-                else:
-                    continue
-
-        return cnt
-
-
-    def _calc_iou(self, box1, box2):
-        # box = (x1, y1, x2, y2)
-        box1_area = (box1[2] - box1[0] + 1) * (box1[3] - box1[1] + 1)
-        box2_area = (box2[2] - box2[0] + 1) * (box2[3] - box2[1] + 1)
-
-        # obtain x1, y1, x2, y2 of the intersection
-        x1 = max(box1[0], box2[0])
-        y1 = max(box1[1], box2[1])
-        x2 = min(box1[2], box2[2])
-        y2 = min(box1[3], box2[3])
-
-        # compute the width and height of the intersection
-        w = max(0, x2 - x1 + 1)
-        h = max(0, y2 - y1 + 1)
-
-        inter = w * h
-        iou = inter / (box1_area + box2_area - inter)
-        return iou
-
-
-    def predict(self, img_path, model, score_thr, nms_thr):
-        origin_img = cv2.imread(img_path)
-        # print(origin_img.shape)
-
+def imagewise_pred(self, origin_img, model, model_cls_names, score_thr, nms_thr):
         input_shape = "544,960"
         input_shape = tuple(map(int, input_shape.split(',')))
         img, ratio = preprocess(origin_img, input_shape)
@@ -143,82 +44,85 @@ class RawMetrics:
         else:
             final_boxes, final_scores, final_cls_inds = dets[:, :4], dets[:, 4], dets[:, 5]
 
-        label_names = ["car", "bus", "hdv", "truck", "motorcycle", "bicycle", "personal_mobility", "firetruck", "police", "ambulance", "pedestrian", "av"]
+        scores = []
+        labels = []
+        bboxes = []
+        try:
+            for i in range(dets.shape[0]):
+                scores.append(final_scores[i])
+                labels.append(model_cls_names[int(final_cls_inds[i])])
+                bboxes.append(list(final_boxes[i]))
 
-        results = []
-        for i in range(dets.shape[0]):
-            results.append({
-                "label": label_names[int(final_cls_inds[i])],
-                "points": list(final_boxes[i]),
-            })
-
+            results = {
+                "scores": scores,
+                "labels": labels,
+                "bboxes": bboxes
+            }
+            
         return results
-
-
-    def get_raw_metrics(
-        self, 
-        model,
-        nms_thr=0.45, 
-        score_thr=0.4, 
-        iou_thr=0.5
-    ):
-        with open(self.testset_txt_path) as f:
-            lines = f.read().splitlines()
-
-
-        cnts = {
-            "car": np.array([0, 0]), 
-            "bus": np.array([0, 0]), 
-            "hdv": np.array([0, 0]), 
-            "truck": np.array([0, 0]), 
-            "motorcycle":np.array([0, 0]), 
-            "bicycle": np.array([0, 0]), 
-            "personal_mobility":np.array([0, 0]), 
-            "firetruck":np.array([0, 0]), 
-            "police":np.array([0, 0]), 
-            "ambulance":np.array([0, 0]), 
-            "pedestrian":np.array([0, 0]),
-            "av":np.array([0, 0])
-        }
-
-        for line in tqdm(lines):
-            results = self.predict(
-                img_path=f"{self.image_dir}/{line}.jpg", 
-                model=model, 
-                score_thr=score_thr, 
-                nms_thr=nms_thr
-            )
-            if results is None:
-                continue
-
-            result = {"point": [], "label": []}
-            for r in results:
-                result["point"].append(r["points"])
-                result["label"].append(r["label"])
-                
-            actual_labels, actual_bboxes = self._get_actual_bboxes(xml_path=f"{self.annotation_dir}/{line}.xml")
-            
-            cnt = self._count_res(
-                pred_bboxes=result["point"], 
-                pred_labels=result["label"], 
-                actual_bboxes=actual_bboxes, 
-                actual_labels=actual_labels,
-                iou_thr=iou_thr,
-            )
-
-            for cls in cnt.keys():
-                cnts[cls] += cnt[cls]
         
-        metrics = {}
-        for cls in cnt.keys():
-            fp = cnts[cls][0]
-            tp = cnts[cls][1]
-            fn = self.npos[cls] - tp
-            
-            metrics[f"{cls}_FP"] = fp
-            metrics[f"{cls}_TP"] = tp
-            metrics[f"{cls}_FN"] = fn
-            
-        return metrics
-    
-    
+
+def batchwise_pred(batchwise_img_list, model, model_cls_names, nms_thr, score_thr):
+    pred_batchwise_bbox_list = []
+    pred_batchwise_label_list = []
+    pred_batchwise_score_list = []
+    for batchwise_img in tqdm(batchwise_img_list):
+        pred_batchwise_bbox = []
+        pred_batchwise_label = []
+        pred_batchwise_score = []
+        for img in batchwise_img:
+            results = imagewise_pred(
+                model=model, 
+                model_cls_names=model_cls_names,
+                origin_img=img,
+                nms_thr=nms_thr,
+                score_thr=score_thr,
+            )
+            try:
+                pred_batchwise_bbox.append(results["bboxes"])
+                pred_batchwise_label.append(results["labels"])
+                pred_batchwise_score.append(results["scores"])
+            except:
+                # 객체가 없는 경우
+                pred_batchwise_bbox.append([])
+                pred_batchwise_label.append([])
+                pred_batchwise_score.append([])
+
+        pred_batchwise_bbox_list.append(np.array(pred_batchwise_bbox))
+        pred_batchwise_label_list.append(np.array(pred_batchwise_label))
+        pred_batchwise_score_list.append(np.array(pred_batchwise_score))
+
+    return pred_batchwise_bbox_list, pred_batchwise_label_list, pred_batchwise_score_list
+
+
+
+
+def get_raw_metrics(model, nms_thr, score_thr, voc_data_dir="datasets/VOCdevkit")
+    model_cls_names = list(VOC_CLASSES)
+
+    test_name_list, actual_bbox_list, actual_label_list, num_obj_dict, img_arr_list = get_data_from_voc(voc_data_dir=voc_data_dir, model_cls_names=model_cls_names, is_test=True)
+
+    actual_batchwise_bbox_list = make_batchwise_format(actual_bbox_list)
+    actual_batchwise_label_list = make_batchwise_format(actual_label_list)
+    batchwise_img_list = make_batchwise_format(img_arr_list)
+
+    pred_batchwise_bbox_list, pred_batchwise_label_list, pred_batchwise_score_list = batchwise_pred(
+        batchwise_img_list=batchwise_img_list, 
+        model=model, 
+        model_cls_names=model_cls_names, 
+        nms_thr=nms_thr, 
+        score_thr=score_thr
+    )
+
+    evaluator = Evaluator()
+
+    conf_mat_results = evaluator.conf_mat_eval(
+        total_pos_class_dict=num_obj_dict,
+        actual_batchwise_bbox_list=actual_batchwise_bbox_list, 
+        actual_batchwise_label_list=actual_batchwise_label_list, 
+        pred_batchwise_bbox_list=pred_batchwise_bbox_list, 
+        pred_batchwise_label_list=pred_batchwise_label_list,
+        iou_thr=0.5
+    )
+
+    return conf_mat_results

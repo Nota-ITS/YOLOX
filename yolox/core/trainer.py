@@ -35,7 +35,7 @@ from yolox.utils import (
     synchronize
 )
 from .retrain_utils import RetrainUtils
-from yolox.utils.raw_metrics import RawMetrics
+from yolox.utils.raw_metrics import get_raw_metrics
 from mlops_utils.wandb import train_and_log_torch_model
 
 class Trainer:
@@ -404,14 +404,8 @@ class Trainer:
         ap50_95, ap50, summary = self.exp.eval(
             evalmodel, self.evaluator, self.is_distributed
         )
-            
-        raw_metrics = RawMetrics()
-        raw_metrics_res = raw_metrics.get_raw_metrics(
-            model=evalmodel,
-            nms_thr=0.45, 
-            score_thr=0.4, 
-            iou_thr=0.5
-        )# raw metrics 로깅을 위한 함수
+                    
+        raw_metrics_res = get_raw_metrics(model=evalmodel, nms_thr=0.65, score_thr=0.4)
         
         self.model.train()
         if self.rank == 0:
