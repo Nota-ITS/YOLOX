@@ -14,7 +14,7 @@ nets_path = os.path.join(base_path, "netspresso-compression-toolkit")
 sys.path.append(nets_path)
 sys.path.append(os.getcwd())
 from yolox.data.data_augment import preproc as preprocess
-from yolox.data.datasets import COCO_CLASSES
+from yolox.data.datasets import VOC_CLASSES
 from yolox.utils import mkdir, multiclass_nms, demo_postprocess, vis
 import torch
 
@@ -89,7 +89,7 @@ if __name__ == '__main__':
     if dets is not None:
         final_boxes, final_scores, final_cls_inds = dets[:, :4], dets[:, 4], dets[:, 5]
         origin_img = vis(origin_img, final_boxes, final_scores, final_cls_inds,
-                         conf=args.score_thr, class_names=COCO_CLASSES)
+                         conf=args.score_thr, class_names=VOC_CLASSES)
 
     mkdir(args.output_dir)
     output_path = os.path.join(args.output_dir, args.image_path.split("/")[-1])
