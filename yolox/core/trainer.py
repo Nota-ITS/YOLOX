@@ -65,7 +65,7 @@ class Trainer:
         self.input_size = exp.input_size
         self.best_ap = 0
 
-        self.criteria = RetrainUtils(self.data_type, self.exp.num_classes)
+        self.criteria = RetrainUtils(self.data_type, self.exp.num_classes, self.args.iou_loss_type, self.args.obj_loss_type)
 
         # metric record
         self.meter = MeterBuffer(window_size=exp.print_interval)

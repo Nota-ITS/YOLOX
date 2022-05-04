@@ -5,11 +5,12 @@ import torch.nn.functional as F
 
 from yolox.models.losses import IOUloss
 from yolox.utils import bboxes_iou
+from .varifocal_loss import VarifocalLoss
 
 from loguru import logger
 
 class RetrainUtils(nn.Module):
-    def __init__(self, dtype=torch.float16, num_classes=11):
+    def __init__(self, dtype=torch.float16, num_classes=11, iou_loss_type="iou", obj_loss_type="bce"):
         super().__init__()
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.xin_type = dtype
@@ -21,7 +22,9 @@ class RetrainUtils(nn.Module):
         self.use_l1 = False
         self.l1_loss = nn.L1Loss(reduction="none")
         self.bcewithlog_loss = nn.BCEWithLogitsLoss(reduction="none")
-        self.iou_loss = IOUloss(reduction="none")
+        self.iou_loss = IOUloss(reduction="none", loss_type=iou_loss_type)
+        self.obj_loss_type = obj_loss_type
+        self.varifocal = VarifocalLoss(reduction='none')
         self.grids = [torch.zeros(1).to(self.device)] * len(self.in_channels)
         self.num_classes = num_classes
 
@@ -216,9 +219,19 @@ class RetrainUtils(nn.Module):
         loss_iou = (
             self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], reg_targets)
         ).sum() / num_fg
-        loss_obj = (
-            self.bcewithlog_loss(obj_preds.view(-1, 1), obj_targets)
-        ).sum() / num_fg
+
+        if self.obj_loss_type is "focal":
+            loss_obj = (
+            self.focal_loss(obj_preds.sigmoid().view(-1, 1), obj_targets)
+            ).sum() / num_fg
+        elif self.obj_loss_type is "varifocal":
+            loss_obj = (self.varifocal(obj_preds.view(-1, 1), obj_targets)
+            ).sum() / num_fg
+        else:
+            loss_obj = (
+                self.bcewithlog_loss(obj_preds.view(-1, 1), obj_targets)
+            ).sum() / num_fg
+
         loss_cls = (
             self.bcewithlog_loss(
                 cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets
@@ -242,6 +255,13 @@ class RetrainUtils(nn.Module):
             num_fg / max(num_gts, 1)
         )
 
+    def focal_loss(self, pred, gt):
+        pos_inds = gt.eq(1).float()
+        neg_inds = gt.eq(0).float()
+        pos_loss = torch.log(pred+1e-5) * torch.pow(1 - pred, 2) * pos_inds * 0.75
+        neg_loss = torch.log(1 - pred+1e-5) * torch.pow(pred, 2) * neg_inds * 0.25
+        loss = -(pos_loss + neg_loss)
+        return loss
 
     def get_l1_target(self, l1_target, gt, stride, x_shifts, y_shifts, eps=1e-8):
         stride = stride.to(self.device)

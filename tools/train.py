@@ -102,6 +102,20 @@ def make_parser():
         default=None,
         nargs=argparse.REMAINDER,
     )
+    parser.add_argument(
+        "--iou_loss_type",
+        dest="iou_loss_type",
+        default="iou",
+        type=str,
+        help="choose iou loss type. iou or giou"
+    )
+    parser.add_argument(
+        "--obj_loss_type",
+        dest="obj_loss_type",
+        default="bce",
+        type=str,
+        help="choose obj loss type. bce, focal or varifocal"
+    )
     return parser
 
 
