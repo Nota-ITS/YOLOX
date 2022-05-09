@@ -3,7 +3,8 @@
 # Copyright (c) Megvii, Inc. and its affiliates.
 
 import argparse
-import os
+import os, sys
+sys.path.append(os.getcwd())
 from loguru import logger
 
 import torch
