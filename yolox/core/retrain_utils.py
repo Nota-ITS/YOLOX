@@ -220,11 +220,11 @@ class RetrainUtils(nn.Module):
             self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], reg_targets)
         ).sum() / num_fg
 
-        if self.obj_loss_type is "focal":
+        if self.obj_loss_type == "focal":
             loss_obj = (
             self.focal_loss(obj_preds.sigmoid().view(-1, 1), obj_targets)
             ).sum() / num_fg
-        elif self.obj_loss_type is "varifocal":
+        elif self.obj_loss_type == "varifocal":
             loss_obj = (self.varifocal(obj_preds.view(-1, 1), obj_targets)
             ).sum() / num_fg
         else:
